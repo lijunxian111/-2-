@@ -32,49 +32,60 @@ class GaussianNoise(paddle.nn.Layer):
         return din
 
 
-
 class Classifier(paddle.nn.Layer):
     # self代表类的实例自身
     def __init__(self):
-              # 初始化父类中的一些参数
+        # 初始化父类中的一些参数
         super(Classifier, self).__init__()
         
-        self.conv1 = paddle.nn.Conv1D(in_channels=1, out_channels=64, kernel_size=1)
-        self.conv2 = paddle.nn.Conv1D(in_channels=64, out_channels=32, kernel_size=3)
-        self.conv3 = paddle.nn.Conv1D(in_channels=32, out_channels=64, kernel_size=1)
-        self.conv4 = paddle.nn.Conv1D(in_channels=64, out_channels=64, kernel_size=3)
+        self.inconv= paddle.nn.Sequential(
+            paddle.nn.Conv1D(1, 16, kernel_size=7, stride=2, padding=3),
+            paddle.nn.BatchNorm1D(16),
+            paddle.nn.ReLU(),
+        )
+        self.conv1 = paddle.nn.Conv1D(in_channels=16, out_channels=16, kernel_size=1,stride=1,padding=1)
+        self.conv2 = paddle.nn.Conv1D(in_channels=16, out_channels=16, kernel_size=3,stride=1,padding=1)
+        self.conv3 = paddle.nn.Conv1D(in_channels=16, out_channels=64, kernel_size=1,stride=1)
+        self.shortcut = paddle.nn.Conv1D(in_channels=16, out_channels=64, kernel_size=1,stride=1,padding=1)
         self.flatten = paddle.nn.Flatten()
-        
         self.dropout = paddle.nn.Dropout()
-        self.fc = paddle.nn.Linear(in_features=960, out_features=6)
+        self.fc = paddle.nn.Linear(in_features=1472, out_features=6)
         self.relu = paddle.nn.ReLU()
-        self.pool = paddle.nn.MaxPool1D(6)
+        self.pool =  paddle.nn.MaxPool1D(kernel_size=3, stride=2, padding=1)
+        self.pool2=  paddle.nn.AvgPool1D(6)
         self.softmax = paddle.nn.Softmax()
         self.noise= GaussianNoise(0.005)
-        self.bn1=paddle.nn.BatchNorm1D(32)
-        self.bn2=paddle.nn.BatchNorm1D(64)
+        self.bn1=paddle.nn.BatchNorm1D(16)
+        self.bn2=paddle.nn.BatchNorm1D(32)
+        self.bn3=paddle.nn.BatchNorm1D(64)
 
-    # 网络的前向计算,创新的内容为加入batch—normanization
+    # 网络的前向计算,创新的内容为加入batch—normanization,resnet
     def forward(self, inputs):
         #print(inputs.shape)
         
         x = self.noise(inputs)       ##这里是创新的内容，加入噪声
-        x = self.pool(self.relu(self.conv1(x)))
-        x=self.bn2(x)
-        h  = x #设置shortcut
+        x = self.inconv(x)
+        #print(x.shape)
+        x=self.pool(x)
+        h=x
+        x = self.relu(self.conv1(x))
+        x=self.bn1(x)
+        #h  = x #设置shortcut
         x = self.relu(self.conv2(x))
         x=self.bn1(x)
         #print(x.shape)
         x = self.dropout(x)
-        x = self.relu(self.conv3(x))
-        x=self.bn2(x)
-        h=self.relu(self.conv4(h))
-        x = x+h
-        
-        x=self.pool(x)
-        x = self.dropout(x)
-        x=self.bn2(x)
         #print(x.shape)
+        x = self.relu(self.conv3(x))
+        #print(x.shape)
+        x=self.bn3(x)
+        #print(x.shape)
+        
+        h=self.shortcut(h)
+        #print(h.shape)
+        x=x+h
+        #print(x.shape)
+        x=self.pool2(x)
         x = self.flatten(x)
         #print(x.shape)
         x = self.fc(x)
